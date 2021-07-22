@@ -105,6 +105,7 @@ MAIN () {
                 echo "    -n, --dry-run"
                 echo "        --help"
                 exit 0
+                ;;
             *)
                 >&2 echo "snapback: unknown option: $1"
                 exit 1
