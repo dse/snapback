@@ -1,0 +1,70 @@
+#!/usr/bin/env perl
+use warnings;
+use strict;
+
+use File::Find qw(find);
+
+if (scalar @ARGV <= 2) {
+    die("not enough arguments\n");
+}
+
+my @dirs = @ARGV;
+my $dirA = shift(@dirs);
+my $dirB = pop(@dirs);
+
+collect($dirA);
+collect($dirB);
+foreach my $dir (@dirs) {
+    cleanup($dir);
+}
+
+my %accounted;
+sub collect {
+    my ($dir) = @_;
+    counterReset();
+    warn("Collecting files in $dir ...\n");
+    my $collect = sub {
+        counterIncrement();
+        my @lstat = lstat($_);
+        return if (!scalar @lstat);
+        return if (!-f _);
+        my ($dev, $ino, $mode, $nlink, $uid, $gid) = @lstat;
+        $accounted{$dev, $ino} = 1;
+    };
+    find($collect, $dir);
+    counterReset();
+}
+sub cleanup {
+    my ($dir) = @_;
+    counterReset();
+    my $cleanup = sub {
+        counterIncrement();
+        my @lstat = lstat($_);
+        return if (!scalar @lstat);
+        return if (!-f _);
+        my ($dev, $ino, $mode, $nlink, $uid, $gid) = @lstat;
+        if ($accounted{$dev, $ino}) {
+            # print("deleting $File::Find::name [$dev, $ino]\n");
+        } else {
+            print("keeping $File::Find::name [$dev, $ino]\n");
+            $accounted{$dev, $ino} = 1;
+        }
+    };
+    warn("Deleting redundant files in $dir ...\n");
+    find($cleanup, $dir);
+    counterReset();
+}
+
+our $counter;
+BEGIN {
+    $counter = 0;
+    STDERR->autoflush(1);
+}
+sub counterReset {
+    printf STDERR ("  %d\n", $counter) if -t 2 && $counter;
+    $counter = 0;
+}
+sub counterIncrement {
+    $counter += 1;
+    printf STDERR ("  %d\r", $counter) if -t 2 && $counter % 100 == 0;
+}
