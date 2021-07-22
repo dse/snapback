@@ -2,6 +2,45 @@
 use warnings;
 use strict;
 
+#------------------------------------------------------------------------------
+use File::Basename qw(basename);
+our $PROGNAME = basename($0);
+
+#------------------------------------------------------------------------------
+use open IO => qw(:locale);
+use Encode::Locale;
+use Encode qw(decode);
+BEGIN {
+    @ARGV = map { decode('locale', $_, Encode::FB_CROAK) } @ARGV;
+}
+
+#------------------------------------------------------------------------------
+our $verbose = 0;
+our $dryRun = 0;
+our $progress = 0;
+
+#------------------------------------------------------------------------------
+use Getopt::Long;
+Getopt::Long::Configure('bundling', 'gnu_compat', 'no_ignore_case');
+Getopt::Long::GetOptions(
+    'v|verbose+' => \$verbose,
+    'n|dry-run'  => \$dryRun,
+    'progress+'  => \$progress,
+    'h|help'     => sub { usage(); exit(0); },
+) or die("Type '$PROGNAME --help' for help.\n");
+
+sub usage { print(<<"END"); }
+usage:
+    $PROGNAME [<option> ...] [<filename> ...]
+options:
+    -h, --help
+    -n, --dry-run
+    -v, --verbose
+        --progress
+END
+
+###############################################################################
+
 use File::Find qw(find);
 
 if (scalar @ARGV <= 2) {
@@ -18,13 +57,18 @@ foreach my $dir (@dirs) {
     cleanup($dir);
 }
 
+warn("Done.\n");
+
+###############################################################################
+
 my %accounted;
+
 sub collect {
     my ($dir) = @_;
-    counterReset();
-    warn("Collecting files in $dir ...\n");
+    counterReset() if $progress;
+    warn("Collecting files in $dir ...\n") if $verbose;
     my $collect = sub {
-        counterIncrement();
+        counterIncrement() if $progress;
         my @lstat = lstat($_);
         return if (!scalar @lstat);
         return if (!-f _);
@@ -32,27 +76,37 @@ sub collect {
         $accounted{$dev, $ino} = 1;
     };
     find($collect, $dir);
-    counterReset();
+    counterReset() if $progress;
 }
+
 sub cleanup {
     my ($dir) = @_;
-    counterReset();
+    counterReset() if $progress;
     my $cleanup = sub {
-        counterIncrement();
+        counterIncrement() if $progress;
         my @lstat = lstat($_);
         return if (!scalar @lstat);
         return if (!-f _);
         my ($dev, $ino, $mode, $nlink, $uid, $gid) = @lstat;
         if ($accounted{$dev, $ino}) {
-            # print("deleting $File::Find::name [$dev, $ino]\n");
+            if ($verbose || $dryRun) {
+                print("deleting $File::Find::name [$dev, $ino]\n");
+            }
+            if (!$dryRun) {
+                if (!unlink($File::Find::name)) {
+                    warn("${File::Find::name}: $!\n");
+                }
+            }
         } else {
-            print("keeping $File::Find::name [$dev, $ino]\n");
+            if ($verbose || $dryRun) {
+                print("keeping $File::Find::name [$dev, $ino]\n");
+            }
             $accounted{$dev, $ino} = 1;
         }
     };
-    warn("Deleting redundant files in $dir ...\n");
+    warn("Deleting redundant files in $dir ...\n") if $verbose;
     find($cleanup, $dir);
-    counterReset();
+    counterReset() if $progress;
 }
 
 our $counter;
