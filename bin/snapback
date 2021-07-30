@@ -95,6 +95,9 @@ MAIN () {
                 rsync_options+=(--dry-run)
                 dryrun=1
                 ;;
+            -q|--quicker)
+                rsync_options+=(--exclude='/Library/Caches/')
+                ;;
             --help)
                 echo "usage:"
                 echo "    snapback [<option> ...]"
